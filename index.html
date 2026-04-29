@@ -5,18 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sebo - Sistema de Recibos</title>
 
-<!-- Biblioteca código de barras -->
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 
 <style>
-* {
-    box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
     font-family: Arial, sans-serif;
     background: #f0f2f5;
-    /* margin: 0; */
 }
 
 header {
@@ -40,14 +36,9 @@ header {
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
-h2 {
-    margin-top: 0;
-    font-size: 18px;
-}
+h2 { margin-top: 0; font-size: 18px; }
 
-.form-group {
-    margin-bottom: 10px;
-}
+.form-group { margin-bottom: 10px; }
 
 input, select {
     width: 100%;
@@ -64,11 +55,10 @@ button {
     border: none;
     border-radius: 4px;
     cursor: pointer;
+    margin-top: 5px;
 }
 
-button:hover {
-    background: #333;
-}
+button:hover { background: #333; }
 
 .lista {
     max-height: 220px;
@@ -81,18 +71,23 @@ button:hover {
     font-size: 14px;
 }
 
-.usado {
-    color: red;
-    font-weight: bold;
-}
+.usado { color: red; font-weight: bold; }
+.disponivel { color: green; font-weight: bold; }
 
-.disponivel {
-    color: green;
-    font-weight: bold;
-}
-
-/* impressão */
+/* impressão térmica */
 @media print {
+    @page {
+        size: 80mm auto;
+        margin: 0;
+    }
+
+    html, body {
+        width: 80mm;
+        height: auto;
+        margin: 0;
+        padding: 0;
+    }
+
     body * {
         visibility: hidden;
     }
@@ -105,14 +100,33 @@ button:hover {
         position: absolute;
         top: 0;
         left: 0;
-        width: 280px;
+        width: 72mm;
+        padding: 5px;
         font-family: monospace;
-        font-size: 22px;
+        font-size: 12px;
+        line-height: 1.1;
+
+        /* 🔥 ESSENCIAL PRA NÃO QUEBRAR */
+        page-break-before: avoid;
+        page-break-after: avoid;
+        page-break-inside: avoid;
+        break-inside: avoid;
     }
 }
 
-#recibo {
-    display: none;
+#recibo { display: none; }
+
+a {
+    border: solid white 2px;
+    text-decoration: none;
+    border-radius: 20px;
+    background-color: rgba(255, 77, 6, 0.521);
+    color: aliceblue;
+}
+
+#itensLista {
+    font-size: 14px;
+    margin-top: 10px;
 }
 </style>
 </head>
@@ -121,52 +135,65 @@ button:hover {
 
 <header>
     <h1>Sistema de Recibos</h1>
+    <a href="https://www.loopweb.company/">site feito por loopweb</a>
 </header>
 
 <div class="container">
 
-    <div class="card">
-        <h2>Gerar Recibo</h2>
+<div class="card">
+<h2>Gerar Recibo</h2>
 
-        <div class="form-group">
-            <input type="text" id="funcionario" placeholder="Funcionário">
-        </div>
+<div class="form-group">
+<input type="text" id="funcionario" placeholder="Funcionário">
+</div>
 
-        <div class="form-group">
-            <select id="loja">
-                <option value="Loja 1">Loja sinimbu</option>
-                <option value="Loja 2">Loja julio</option>
-            </select>
-        </div>
+<div class="form-group">
+<select id="loja">
+<option value="Loja sinimbu">Loja sinimbu</option>
+<option value="Loja julio">Loja julio</option>
+</select>
+</div>
 
-        <div class="form-group">
-            <input type="number" id="valor" placeholder="Valor R$">
-        </div>
+<!-- ITENS -->
+<div class="form-group">
+<input type="text" id="nomeItem" placeholder="Nome do item">
+</div>
 
-        <button onclick="gerarRecibo()">Gerar e Imprimir</button>
-    </div>
+<div class="form-group">
+<input type="number" id="valorItem" placeholder="Valor do item">
+</div>
 
-    <div class="card">
-        <h2>Verificar Vale</h2>
+<button onclick="adicionarItem()">Adicionar Item</button>
 
-        <div class="form-group">
-            <input type="text" id="codigoBusca" placeholder="Código ou leitura do scanner">
-        </div>
+<div id="itensLista"></div>
 
-        <button onclick="verificarVale()">Verificar</button>
-    </div>
+<h3>Total: R$ <span id="total">0.00</span></h3>
 
-    <div class="card">
-        <h2>Histórico</h2>
-        <div class="lista" id="lista"></div>
-    </div>
+<button onclick="gerarRecibo()">Gerar e Imprimir</button>
+</div>
+
+<div class="card">
+<h2>Verificar Vale</h2>
+
+<div class="form-group">
+<input type="text" id="codigoBusca" placeholder="Código ou scanner">
+</div>
+
+<button onclick="verificarVale()">Verificar</button>
+</div>
+
+<div class="card">
+<h2>Histórico</h2>
+<div class="lista" id="lista"></div>
+</div>
 
 </div>
 
-<!-- RECIBO -->
 <div id="recibo"></div>
 
 <script>
+let itens = [];
+
 function gerarID() {
     return "V" + Date.now();
 }
@@ -179,21 +206,55 @@ function carregar() {
     return JSON.parse(localStorage.getItem("vales")) || [];
 }
 
+function adicionarItem() {
+    const nome = document.getElementById("nomeItem").value;
+    const valor = parseFloat(document.getElementById("valorItem").value);
+
+    if (!nome || isNaN(valor)) {
+        alert("Preencha item e valor");
+        return;
+    }
+
+    itens.push({ nome, valor });
+
+    document.getElementById("nomeItem").value = "";
+    document.getElementById("valorItem").value = "";
+
+    atualizarLista();
+}
+
+function atualizarLista() {
+    const lista = document.getElementById("itensLista");
+    const totalSpan = document.getElementById("total");
+
+    lista.innerHTML = "";
+    let total = 0;
+
+    itens.forEach(i => {
+        total += i.valor;
+        lista.innerHTML += `${i.nome} - R$ ${i.valor.toFixed(2)}<br>`;
+    });
+
+    totalSpan.innerText = total.toFixed(2);
+}
+
 function gerarRecibo() {
     const funcionario = document.getElementById("funcionario").value;
     const loja = document.getElementById("loja").value;
-    const valor = document.getElementById("valor").value;
 
-    if (!funcionario || !valor) {
-        alert("Preencha os campos");
+    if (!funcionario || itens.length === 0) {
+        alert("Preencha os dados e adicione itens");
         return;
     }
+
+    const valor = itens.reduce((soma, i) => soma + i.valor, 0);
 
     const vale = {
         id: gerarID(),
         funcionario,
         loja,
         valor,
+        itens: [...itens],
         usado: false,
         data: new Date().toLocaleString()
     };
@@ -204,29 +265,44 @@ function gerarRecibo() {
 
     imprimir(vale);
     listar();
+
+    // limpar tudo
+    document.getElementById("funcionario").value = "";
+    itens = [];
+    atualizarLista();
 }
 
 function imprimir(v) {
     const r = document.getElementById("recibo");
-
     r.style.display = "block";
 
+    let itensHTML = "";
+    v.itens.forEach(i => {
+        itensHTML += `${i.nome} - R$ ${i.valor.toFixed(2)}<br>`;
+    });
+
     r.innerHTML = `
-        <center>
-        SEBO<br>
-        ${v.loja}<br>
-        ------------------<br>
-        </center>
-        Func: ${v.funcionario}<br>
-        Valor: R$ ${v.valor}<br>
-        Data: ${v.data}<br>
-        Código:<br>${v.id}<br><br>
+<center>
+SEBO<br>
+${v.loja}<br>
+----------------<br>
+</center>
 
-        <svg id="barcode"></svg>
+Func: ${v.funcionario}<br>
 
-        <br>------------------<br>
-        Apresente este vale
-    `;
+${itensHTML}
+
+----------------<br>
+Total: R$ ${v.valor.toFixed(2)}<br>
+${v.data}<br>
+Cod: ${v.id}<br>
+
+<svg id="barcode"></svg>
+
+Ass
+<br>----------------<br>
+
+`;
 
     JsBarcode("#barcode", v.id, {
         format: "CODE128",
@@ -236,7 +312,6 @@ function imprimir(v) {
     });
 
     window.print();
-
     r.style.display = "none";
 }
 
@@ -246,10 +321,7 @@ function verificarVale() {
 
     const vale = vales.find(v => v.id === codigo);
 
-    if (!vale) {
-        alert("Vale não encontrado");
-        return;
-    }
+    if (!vale) return alert("Vale não encontrado");
 
     if (vale.usado) {
         alert("Vale já utilizado");
@@ -273,12 +345,12 @@ function listar() {
         div.className = "item";
 
         div.innerHTML = `
-            <b>${v.id}</b><br>
-            R$ ${v.valor} - ${v.loja}<br>
-            <span class="${v.usado ? 'usado' : 'disponivel'}">
-                ${v.usado ? 'USADO' : 'DISPONÍVEL'}
-            </span>
-        `;
+<b>${v.id}</b><br>
+R$ ${v.valor.toFixed(2)} - ${v.loja}<br>
+<span class="${v.usado ? 'usado' : 'disponivel'}">
+${v.usado ? 'USADO' : 'DISPONÍVEL'}
+</span>
+`;
 
         lista.appendChild(div);
     });
