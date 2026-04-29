@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sebo - Sistema de Recibos</title>
+
+<!-- Biblioteca código de barras -->
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background: #f0f2f5;
+    margin: 0;
+}
+
+header {
+    background: #1e1e1e;
+    color: #fff;
+    padding: 15px;
+    text-align: center;
+}
+
+.container {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 10px;
+}
+
+.card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+h2 {
+    margin-top: 0;
+    font-size: 18px;
+}
+
+.form-group {
+    margin-bottom: 10px;
+}
+
+input, select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+button {
+    width: 100%;
+    padding: 10px;
+    background: #1e1e1e;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #333;
+}
+
+.lista {
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.item {
+    border-bottom: 1px solid #eee;
+    padding: 8px 0;
+    font-size: 14px;
+}
+
+.usado {
+    color: red;
+    font-weight: bold;
+}
+
+.disponivel {
+    color: green;
+    font-weight: bold;
+}
+
+/* impressão */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    #recibo, #recibo * {
+        visibility: visible;
+    }
+
+    #recibo {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 280px;
+        font-family: monospace;
+        font-size: 12px;
+    }
+}
+
+#recibo {
+    display: none;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>Sistema de Recibos</h1>
+</header>
+
+<div class="container">
+
+    <div class="card">
+        <h2>Gerar Recibo</h2>
+
+        <div class="form-group">
+            <input type="text" id="funcionario" placeholder="Funcionário">
+        </div>
+
+        <div class="form-group">
+            <select id="loja">
+                <option value="Loja 1">Loja 1</option>
+                <option value="Loja 2">Loja 2</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <input type="number" id="valor" placeholder="Valor R$">
+        </div>
+
+        <button onclick="gerarRecibo()">Gerar e Imprimir</button>
+    </div>
+
+    <div class="card">
+        <h2>Verificar Vale</h2>
+
+        <div class="form-group">
+            <input type="text" id="codigoBusca" placeholder="Código ou leitura do scanner">
+        </div>
+
+        <button onclick="verificarVale()">Verificar</button>
+    </div>
+
+    <div class="card">
+        <h2>Histórico</h2>
+        <div class="lista" id="lista"></div>
+    </div>
+
+</div>
+
+<!-- RECIBO -->
+<div id="recibo"></div>
+
+<script>
+function gerarID() {
+    return "V" + Date.now();
+}
+
+function salvar(vales) {
+    localStorage.setItem("vales", JSON.stringify(vales));
+}
+
+function carregar() {
+    return JSON.parse(localStorage.getItem("vales")) || [];
+}
+
+function gerarRecibo() {
+    const funcionario = document.getElementById("funcionario").value;
+    const loja = document.getElementById("loja").value;
+    const valor = document.getElementById("valor").value;
+
+    if (!funcionario || !valor) {
+        alert("Preencha os campos");
+        return;
+    }
+
+    const vale = {
+        id: gerarID(),
+        funcionario,
+        loja,
+        valor,
+        usado: false,
+        data: new Date().toLocaleString()
+    };
+
+    const vales = carregar();
+    vales.push(vale);
+    salvar(vales);
+
+    imprimir(vale);
+    listar();
+}
+
+function imprimir(v) {
+    const r = document.getElementById("recibo");
+
+    r.style.display = "block";
+
+    r.innerHTML = `
+        <center>
+        SEBO<br>
+        ${v.loja}<br>
+        ------------------<br>
+        </center>
+        Func: ${v.funcionario}<br>
+        Valor: R$ ${v.valor}<br>
+        Data: ${v.data}<br>
+        Código:<br>${v.id}<br><br>
+
+        <svg id="barcode"></svg>
+
+        <br>------------------<br>
+        Apresente este vale
+    `;
+
+    JsBarcode("#barcode", v.id, {
+        format: "CODE128",
+        width: 2,
+        height: 40,
+        displayValue: false
+    });
+
+    window.print();
+
+    r.style.display = "none";
+}
+
+function verificarVale() {
+    const codigo = document.getElementById("codigoBusca").value;
+    const vales = carregar();
+
+    const vale = vales.find(v => v.id === codigo);
+
+    if (!vale) {
+        alert("Vale não encontrado");
+        return;
+    }
+
+    if (vale.usado) {
+        alert("Vale já utilizado");
+    } else {
+        if (confirm("Vale válido. Marcar como usado?")) {
+            vale.usado = true;
+            salvar(vales);
+            listar();
+        }
+    }
+}
+
+function listar() {
+    const lista = document.getElementById("lista");
+    const vales = carregar();
+
+    lista.innerHTML = "";
+
+    vales.slice().reverse().forEach(v => {
+        const div = document.createElement("div");
+        div.className = "item";
+
+        div.innerHTML = `
+            <b>${v.id}</b><br>
+            R$ ${v.valor} - ${v.loja}<br>
+            <span class="${v.usado ? 'usado' : 'disponivel'}">
+                ${v.usado ? 'USADO' : 'DISPONÍVEL'}
+            </span>
+        `;
+
+        lista.appendChild(div);
+    });
+}
+
+listar();
+</script>
+
+</body>
+</html>
